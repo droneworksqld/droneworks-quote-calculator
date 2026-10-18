@@ -1,0 +1,8 @@
+# Never commit real pricing exports
+*pricing*.json
+!pricing.example.json
+# Tooling / OS
+node_modules/
+.DS_Store
+Thumbs.db
+*.log
