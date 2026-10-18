@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#2f5233">
+  <meta name="robots" content="noindex">
+  <title>Quote Calculator · DroneWorks QLD</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%232f5233'/%3E%3Cpath d='M32 14c9 6 13 14 13 21a13 13 0 0 1-26 0c0-7 4-15 13-21z' fill='%23e4c66b'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true">
+          <rect width="64" height="64" rx="14" fill="#2f5233"/>
+          <path d="M32 13c9 6 13 14 13 21a13 13 0 0 1-26 0c0-7 4-15 13-21z" fill="#e4c66b"/>
+          <path d="M32 22v26M32 34l-6-5M32 40l6-5" stroke="#2f5233" stroke-width="3" stroke-linecap="round" fill="none"/>
+        </svg>
+        <div>
+          <div class="brand-name">DroneWorks QLD</div>
+          <div class="brand-sub">Quote calculator</div>
+        </div>
+      </div>
+      <button type="button" class="btn btn-ghost" id="openSettings" aria-haspopup="dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zm7.4-2.5a7.6 7.6 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.4 7.4 0 0 0-1.7-1L15 3h-4l-.4 2.6a7.4 7.4 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.6 7.6 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1a7.4 7.4 0 0 0 1.7 1L11 21h4l.4-2.6a7.4 7.4 0 0 0 1.7-1l2.5 1 2-3.5z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+        Settings
+      </button>
+    </header>
+
+    <div class="banner banner-example" id="exampleBanner" role="status">
+      <strong>Example pricing – not real rates.</strong>
+      <span>Enter your real rates in <button type="button" class="linklike" id="bannerSettings">Settings</button>. They're saved on this device only.</span>
+    </div>
+    <div class="banner banner-warn" id="loadWarning" hidden role="alert"></div>
+
+    <main class="layout">
+      <form class="card" id="quoteForm" novalidate autocomplete="off">
+        <h2 class="card-title">Job details</h2>
+
+        <div class="field">
+          <label for="client">Client / paddock <span class="opt">optional</span></label>
+          <input id="client" name="client" type="text" placeholder="e.g. Smith Farming – North paddock" maxlength="120">
+        </div>
+
+        <fieldset class="field">
+          <legend>Job type</legend>
+          <div class="segmented" id="jobTypeGroup"></div>
+          <p class="error" data-error-for="jobType"></p>
+        </fieldset>
+
+        <div class="field">
+          <label for="hectares">Area</label>
+          <div class="input-unit">
+            <input id="hectares" name="hectares" type="number" inputmode="decimal" min="0" step="any" placeholder="0" required>
+            <span class="unit">ha</span>
+          </div>
+          <p class="error" data-error-for="hectares"></p>
+        </div>
+
+        <div class="field">
+          <label for="product">Product / chemical</label>
+          <select id="product" name="product"></select>
+          <p class="error" data-error-for="productId"></p>
+        </div>
+
+        <div class="field" id="productNameField" hidden>
+          <label for="productName">Client's product name <span class="opt">optional</span></label>
+          <input id="productName" name="productName" type="text" placeholder="e.g. Glyphosate 450" maxlength="80">
+        </div>
+
+        <fieldset class="field">
+          <legend>Product supplied by</legend>
+          <div class="segmented two">
+            <label class="seg"><input type="radio" name="supply" value="droneworks"><span>DroneWorks QLD</span></label>
+            <label class="seg"><input type="radio" name="supply" value="client" checked><span>Client</span></label>
+          </div>
+          <p class="hint" id="supplyHint"></p>
+        </fieldset>
+
+        <div class="field">
+          <label for="appRate">Application rate <span class="opt" id="rateOpt">optional</span></label>
+          <div class="input-unit">
+            <input id="appRate" name="appRate" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+            <select id="appUnit" name="appUnit" aria-label="Rate unit">
+              <option value="L">L/ha</option>
+              <option value="kg">kg/ha</option>
+            </select>
+          </div>
+          <p class="hint">Product rate per hectare as per the label.</p>
+          <p class="error" data-error-for="appRate"></p>
+        </div>
+
+        <fieldset class="field">
+          <legend>Travel distance from base</legend>
+          <div class="input-unit">
+            <input id="distanceKm" name="distanceKm" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+            <span class="unit">km</span>
+          </div>
+          <div class="segmented two compact">
+            <label class="seg"><input type="radio" name="distanceMode" value="oneway" checked><span>One way (×2)</span></label>
+            <label class="seg"><input type="radio" name="distanceMode" value="return"><span>Return trip total</span></label>
+          </div>
+          <p class="hint" id="travelHint"></p>
+          <p class="error" data-error-for="distanceKm"></p>
+        </fieldset>
+
+        <fieldset class="field">
+          <legend>Surcharges <span class="opt">optional</span></legend>
+          <label class="check"><input type="checkbox" id="rush" name="rush"><span>Rush / time-critical <em id="rushPct"></em></span></label>
+          <label class="check"><input type="checkbox" id="terrain" name="terrain"><span>Difficult terrain / waterlogged <em id="terrainPct"></em></span></label>
+        </fieldset>
+
+        <div class="field">
+          <label for="notes">Notes on quote <span class="opt">optional</span></label>
+          <textarea id="notes" name="notes" rows="2" maxlength="400" placeholder="e.g. Includes 2 passes, buffer zones excluded"></textarea>
+        </div>
+      </form>
+
+      <section class="card result" id="resultCard" aria-live="polite">
+        <div class="result-head">
+          <h2 class="card-title">Quote</h2>
+          <span class="quote-no" id="quoteNo"></span>
+        </div>
+        <div id="resultEmpty" class="result-empty">Enter the area in hectares to see a price.</div>
+        <div id="resultBody" hidden>
+          <div class="total-hero">
+            <div class="total-label">Total inc GST</div>
+            <div class="total-amount" id="totalAmount"></div>
+            <div class="total-perha" id="perHa"></div>
+          </div>
+          <table class="breakdown">
+            <tbody id="breakdownRows"></tbody>
+            <tfoot>
+              <tr><th scope="row">Subtotal (ex GST)</th><td id="subtotal"></td></tr>
+              <tr><th scope="row" id="gstLabel">GST</th><td id="gst"></td></tr>
+              <tr class="grand"><th scope="row">Total (inc GST)</th><td id="total"></td></tr>
+            </tfoot>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div class="actionbar">
+      <button type="button" class="btn btn-secondary" id="newQuote">New</button>
+      <button type="button" class="btn btn-secondary" id="copyQuote" disabled>Copy quote</button>
+      <button type="button" class="btn btn-primary" id="printQuote" disabled>Print / Save PDF</button>
+    </div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </div>
+
+  <!-- Settings -->
+  <dialog id="settingsDialog" class="settings" aria-labelledby="settingsTitle">
+    <form method="dialog" id="settingsForm" novalidate>
+      <header class="settings-head">
+        <h2 id="settingsTitle">Pricing settings</h2>
+        <button type="button" class="btn btn-ghost" id="closeSettings" aria-label="Close settings">✕</button>
+      </header>
+      <div class="settings-body">
+        <p class="notice">Your rates are saved <strong>only in this browser on this device</strong> — never in the website code. Use <em>Export</em> to back them up or move them to another phone or computer, then <em>Import</em> there.</p>
+        <div class="banner banner-example inline" id="settingsExampleNote">Currently showing <strong>example</strong> numbers. Replace them with your real rates and tap Save.</div>
+
+        <h3>General (ex GST)</h3>
+        <div class="grid2">
+          <label class="sfield">Minimum job charge ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="minimumCharge"></label>
+          <label class="sfield">Travel ($ per km)<input type="number" inputmode="decimal" min="0" step="any" data-path="travel.perKm"></label>
+          <label class="sfield">Free travel km (return)<input type="number" inputmode="decimal" min="0" step="any" data-path="travel.freeKm"></label>
+          <label class="sfield">Product markup (%)<input type="number" inputmode="decimal" min="0" step="any" data-path="chemicalMarkupPct"></label>
+          <label class="sfield">Rush surcharge (%)<input type="number" inputmode="decimal" min="0" step="any" data-path="surcharges.rushPct"></label>
+          <label class="sfield">Terrain surcharge (%)<input type="number" inputmode="decimal" min="0" step="any" data-path="surcharges.terrainPct"></label>
+          <label class="sfield">GST (%)<input type="number" inputmode="decimal" min="0" max="100" step="any" data-path="gstRate" data-percent="1"></label>
+          <label class="sfield">Quote valid for (days)<input type="number" inputmode="numeric" min="0" step="1" data-path="quoteValidityDays"></label>
+        </div>
+
+        <h3>Job types &amp; rates</h3>
+        <div class="rows" id="jobTypeRows"></div>
+        <button type="button" class="btn btn-small" id="addJobType">+ Add job type</button>
+
+        <h3>Products &amp; costs <span class="opt">your buy price, ex GST</span></h3>
+        <div class="rows" id="productRows"></div>
+        <button type="button" class="btn btn-small" id="addProduct">+ Add product</button>
+
+        <div class="errors" id="settingsErrors" role="alert" hidden></div>
+
+        <h3>Backup &amp; devices</h3>
+        <div class="btn-row">
+          <button type="button" class="btn btn-secondary" id="exportSettings">Export settings (.json)</button>
+          <label class="btn btn-secondary file-btn">Import settings<input type="file" id="importSettings" accept="application/json,.json"></label>
+        </div>
+        <button type="button" class="btn btn-danger-link" id="resetSettings">Reset to example pricing</button>
+      </div>
+      <footer class="settings-foot">
+        <button type="button" class="btn btn-secondary" id="cancelSettings">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveSettings">Save</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Printable quote (filled by app.js, only visible when printing) -->
+  <section id="printView" class="print-quote" aria-hidden="true"></section>
+
+  <script src="business.js"></script>
+  <script src="pricing.example.js"></script>
+  <script src="pricing.js"></script>
+  <script src="settings.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
