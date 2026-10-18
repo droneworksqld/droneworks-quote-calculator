@@ -30,6 +30,8 @@
     if (!p.travel || !isNonNeg(p.travel.freeKm)) e.push('Free km must be 0 or more.');
     if (!p.surcharges || !isNonNeg(p.surcharges.rushPct)) e.push('Rush surcharge must be 0% or more.');
     if (!p.surcharges || !isNonNeg(p.surcharges.terrainPct)) e.push('Terrain surcharge must be 0% or more.');
+    // Missing setupFee is allowed so settings saved before this field existed still load.
+    if (p.setupFee !== undefined && p.setupFee !== null && !isNonNeg(p.setupFee)) e.push('Set up / pack up / clean up fee must be 0 or more.');
 
     if (!Array.isArray(p.jobTypes) || p.jobTypes.length === 0) e.push('Add at least one job type.');
     else {
@@ -78,6 +80,15 @@
     return o;
   }
 
+  /** Fill fields added after a settings file was saved, using the example defaults. */
+  function applyDefaults(p, example) {
+    var out = clone(p);
+    if (out.setupFee === undefined || out.setupFee === null) {
+      out.setupFee = example && isNonNeg(example.setupFee) ? example.setupFee : 0;
+    }
+    return out;
+  }
+
   /**
    * Load pricing. Returns { pricing, isCustom, isExample, error }.
    * isExample is true when no valid custom pricing is saved, or saved pricing is identical to the example.
@@ -90,6 +101,7 @@
       var p = JSON.parse(raw);
       var errs = validatePricing(p);
       if (errs.length) return { pricing: clone(example), isCustom: false, isExample: true, error: 'Saved settings were invalid and were ignored: ' + errs[0] };
+      p = applyDefaults(p, example);
       return { pricing: p, isCustom: true, isExample: samePricing(p, example), error: null };
     } catch (err2) {
       return { pricing: clone(example), isCustom: false, isExample: true, error: 'Saved settings could not be read.' };
@@ -115,13 +127,15 @@
     }, null, 2);
   }
 
-  /** Parse an exported settings file (or a bare pricing object). Returns { ok, pricing, errors }. */
-  function parseImport(text) {
+  /** Parse an exported settings file (or a bare pricing object). Returns { ok, pricing, errors }.
+   *  Pass example to fill defaults (such as setupFee) on older files. */
+  function parseImport(text, example) {
     var data;
     try { data = JSON.parse(text); } catch (err) { return { ok: false, errors: ['That file is not valid JSON.'] }; }
     var p = data && data.pricing && typeof data.pricing === 'object' ? data.pricing : data;
     var errs = validatePricing(p);
     if (errs.length) return { ok: false, errors: errs };
+    if (example) p = applyDefaults(p, example);
     return { ok: true, pricing: p, errors: [] };
   }
 
@@ -149,6 +163,7 @@
     PRICING_KEY: PRICING_KEY,
     COUNTER_KEY: COUNTER_KEY,
     validatePricing: validatePricing,
+    applyDefaults: applyDefaults,
     samePricing: samePricing,
     loadPricing: loadPricing,
     savePricing: savePricing,

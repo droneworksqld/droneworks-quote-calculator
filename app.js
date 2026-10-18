@@ -102,6 +102,7 @@
       distanceMode: getRadio('distanceMode'),
       rush: $('rush').checked,
       terrain: $('terrain').checked,
+      setupEvents: num($('setupEvents').value),
       notes: $('notes').value.trim()
     };
   }
@@ -138,6 +139,7 @@
     $('travelHint').textContent = hint;
     $('rushPct').textContent = '+' + p.surcharges.rushPct + '%';
     $('terrainPct').textContent = '+' + p.surcharges.terrainPct + '%';
+    $('setupHint').textContent = 'Flat fee of ' + money(isFinite(p.setupFee) ? p.setupFee : 0) + ' per event, on top of the minimum job charge.';
   }
 
   function render() {
@@ -455,7 +457,7 @@
   function importSettings(file) {
     var reader = new FileReader();
     reader.onload = function () {
-      var res = S.parseImport(String(reader.result));
+      var res = S.parseImport(String(reader.result), EXAMPLE);
       if (!res.ok) { showSettingsErrors(['Import failed:'].concat(res.errors)); return; }
       S.savePricing(store, res.pricing);
       draft = clone(res.pricing); fillSettings(); showSettingsErrors([]);

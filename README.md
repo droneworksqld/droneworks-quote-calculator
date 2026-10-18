@@ -1,7 +1,7 @@
 # DroneWorks QLD — Quote Calculator
 
 A simple, mobile-first quote calculator for **DroneWorks QLD** (aerial drone spraying, spreading and seeding — Chinchilla / Western Downs QLD).
-Enter the job (type, hectares, product, rate, travel, surcharges) and get an itemised price ex/inc GST, price per hectare, a copy-paste summary and a printable one-page quote.
+Enter the job (type, hectares, product, rate, travel, surcharges, set-up events) and get an itemised price ex/inc GST, price per hectare, a copy-paste summary and a printable one-page quote.
 
 - Plain HTML/CSS/JS — **no build step, no dependencies, works offline** (just open `index.html`).
 - Designed for a phone in the paddock; works on desktop too.
@@ -24,7 +24,8 @@ This repo is intended to be **public** (free GitHub Pages requires a public repo
 |---|---|
 | Application | hectares × job-type rate ($/ha) |
 | Rush / difficult terrain | % of the application fee (optional ticks) |
-| Minimum job charge | tops up application + surcharges to the minimum (call-out) charge |
+| Minimum job charge | tops up application + rush/terrain to the minimum (call-out) charge |
+| Set up, pack up & clean up | whole number of events × flat fee per event. Added on top of the minimum (like travel), left off the quote when 0, and included in GST |
 | Travel | charged km = one-way × 2 *or* the return distance as entered; minus free km; × $/km |
 | Product supply | only when DroneWorks supplies: rate/ha × ha × unit cost × (1 + markup %) |
 | GST | 10% of subtotal |
@@ -39,6 +40,7 @@ Printed/copied quotes show the product at the marked-up price per L/kg; the cost
 | Minimum job charge | $500 |
 | Travel | $2/km, first 50 km (return) free |
 | Rush / terrain surcharge | 20% / 15% |
+| Set up, pack up & clean up | $50 per event |
 | Product markup | 10% |
 | Products | Example Herbicide $10/L, Example Insecticide $20/L, Example Fungicide $15/L, Example Fertiliser $1/kg, Example Seed $5/kg |
 | GST | 10% · quotes valid 30 days |

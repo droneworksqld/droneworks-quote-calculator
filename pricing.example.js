@@ -13,6 +13,7 @@
     currency: 'AUD',
     gstRate: 0.10,               // 10% GST
     minimumCharge: 500,          // minimum job / call-out charge (ex GST), applies to the application fee
+    setupFee: 50,                // EXAMPLE $ per set up / pack up / clean up event (ex GST); on top of the minimum
     quoteValidityDays: 30,
     chemicalMarkupPct: 10,       // markup on DroneWorks-supplied product
     travel: {

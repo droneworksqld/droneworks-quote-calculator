@@ -110,6 +110,13 @@
           <legend>Surcharges <span class="opt">optional</span></legend>
           <label class="check"><input type="checkbox" id="rush" name="rush"><span>Rush / time-critical <em id="rushPct"></em></span></label>
           <label class="check"><input type="checkbox" id="terrain" name="terrain"><span>Difficult terrain / waterlogged <em id="terrainPct"></em></span></label>
+          <label for="setupEvents">Set up, pack up &amp; clean up <span class="opt">(events)</span></label>
+          <div class="input-unit">
+            <input id="setupEvents" name="setupEvents" type="number" inputmode="numeric" min="0" max="100" step="1" value="0">
+            <span class="unit">events</span>
+          </div>
+          <p class="hint" id="setupHint"></p>
+          <p class="error" data-error-for="setupEvents"></p>
         </fieldset>
 
         <div class="field">
@@ -164,6 +171,7 @@
         <h3>General (ex GST)</h3>
         <div class="grid2">
           <label class="sfield">Minimum job charge ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="minimumCharge"></label>
+          <label class="sfield">Set up, pack up &amp; clean up ($/event)<input type="number" inputmode="decimal" min="0" step="any" data-path="setupFee"></label>
           <label class="sfield">Travel ($ per km)<input type="number" inputmode="decimal" min="0" step="any" data-path="travel.perKm"></label>
           <label class="sfield">Free travel km (return)<input type="number" inputmode="decimal" min="0" step="any" data-path="travel.freeKm"></label>
           <label class="sfield">Product markup (%)<input type="number" inputmode="decimal" min="0" step="any" data-path="chemicalMarkupPct"></label>
