@@ -6,6 +6,8 @@
  *   Application fee  = hectares x job-type rate per ha
  *   Surcharges       = application fee x rush % and/or difficult-terrain %
  *   Minimum charge   = top-up so (application fee + surcharges) >= minimum job charge
+ *   Set-up events    = whole number of events x flat fee per event
+ *                      (on top of the minimum, like travel; omitted when 0)
  *   Travel           = max(0, charged km - free km) x $/km
  *                      charged km = one-way distance x 2, or the return distance as entered
  *   Product          = rate/ha x hectares x unit cost x (1 + markup %)   (only if DroneWorks supplies)
@@ -20,6 +22,7 @@
 
   var MAX_HECTARES = 100000;
   var MAX_KM = 5000;
+  var MAX_SETUP_EVENTS = 100;
 
   function round2(n) {
     return Math.round((n + Number.EPSILON) * 100) / 100;
@@ -73,6 +76,14 @@
     else if (!kmEmpty && km > MAX_KM) e.distanceKm = 'That looks too far — check the distance.';
 
     if (input.distanceMode !== 'oneway' && input.distanceMode !== 'return') e.distanceMode = 'Choose one-way or return.';
+
+    var events = input.setupEvents;
+    var eventsEmpty = events === null || events === undefined;
+    if (typeof events === 'number' && isNaN(events)) e.setupEvents = 'Number of events must be a whole number.';
+    else if (!eventsEmpty && !isNum(events)) e.setupEvents = 'Number of events must be a whole number.';
+    else if (!eventsEmpty && events < 0) e.setupEvents = 'Number of events cannot be negative.';
+    else if (!eventsEmpty && events % 1 !== 0) e.setupEvents = 'Number of events must be a whole number.';
+    else if (!eventsEmpty && events > MAX_SETUP_EVENTS) e.setupEvents = 'That looks too many — check the number of events.';
     return e;
   }
 
@@ -114,7 +125,19 @@
       lines.push({ key: 'minimum', label: 'Minimum job charge adjustment', detail: 'Minimum job charge ' + money(pricing.minimumCharge), amount: minTopUp });
     }
 
-    // 4. Travel
+    // 4. Set up / pack up / clean up — flat fee per event, on top of the minimum (like travel)
+    var events = isNum(input.setupEvents) ? input.setupEvents : 0;
+    var setupFee = isNum(pricing.setupFee) ? pricing.setupFee : 0;
+    if (events > 0 && setupFee > 0) {
+      lines.push({
+        key: 'setup',
+        label: 'Set up / pack up / clean up',
+        detail: events + ' \u00d7 ' + money(setupFee),
+        amount: round2(events * setupFee)
+      });
+    }
+
+    // 5. Travel
     var km = isNum(input.distanceKm) ? input.distanceKm : 0;
     var chargedKm = input.distanceMode === 'oneway' ? km * 2 : km;
     var freeKm = pricing.travel.freeKm || 0;
@@ -127,7 +150,7 @@
       lines.push({ key: 'travel', label: 'Travel', detail: tDetail, amount: travel });
     }
 
-    // 5. Product / chemical
+    // 6. Product / chemical
     var product = findProduct(pricing, input.productId);
     var productInfo = null;
     if (input.supply === 'droneworks' && product) {

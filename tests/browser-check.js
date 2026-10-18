@@ -41,6 +41,28 @@ const assert = require('assert/strict');
   assert.match(copy, /EXAMPLE PRICING/);
   assert.match(copy, /TOTAL \(inc GST\): \$7,810.00/);
 
+  // Set up / pack up / clean up: 3 × $50 on top of the quote above, then back to 0 before the screenshot.
+  assert.equal(await page.inputValue('#setupEvents'), '0');
+  await page.fill('#setupEvents', '3');
+  assert.equal(await page.textContent('#subtotal'), '$7,250.00');
+  assert.equal(await page.textContent('#gst'), '$725.00');
+  assert.equal(await page.textContent('#total'), '$7,975.00');
+  assert.match(await page.textContent('#breakdownRows'), /Set up \/ pack up \/ clean up/);
+  assert.match(await page.textContent('#breakdownRows'), /3 × \$50\.00/);
+  const copySetup = await page.evaluate(() => window.DWApp.buildCopyText());
+  assert.match(copySetup, /Set up \/ pack up \/ clean up: \$150\.00/);
+  assert.match(copySetup, /3 × \$50\.00/);
+  await page.fill('#setupEvents', '-2');
+  assert.match(await page.textContent('[data-error-for="setupEvents"]'), /negative/);
+  await page.fill('#setupEvents', '1.5');
+  assert.match(await page.textContent('[data-error-for="setupEvents"]'), /whole number/);
+  await page.fill('#setupEvents', '101');
+  assert.match(await page.textContent('[data-error-for="setupEvents"]'), /too many/);
+  await page.fill('#setupEvents', '0');
+  assert.equal(await page.textContent('[data-error-for="setupEvents"]'), '');
+  assert.equal(await page.textContent('#total'), '$7,810.00');
+  assert.equal((await page.textContent('#breakdownRows')).includes('Set up / pack up / clean up'), false);
+
   // Screenshot at phone width: grow the viewport to the full page height so sticky/fixed bars sit where they would on a phone.
   await page.evaluate(() => window.scrollTo(0, 0));
   const h = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -63,7 +85,9 @@ const assert = require('assert/strict');
 
   // Settings: change minimum charge + rate, save, reload -> persisted, banner hidden
   await page.click('#openSettings');
+  assert.equal(await page.inputValue('[data-path="setupFee"]'), '50');
   await page.fill('[data-path="minimumCharge"]', '800');
+  await page.fill('[data-path="setupFee"]', '80');
   await page.locator('#jobTypeRows .srow').first().locator('input[type="number"]').fill('35');
   await page.screenshot({ path: '/tmp/pwtest/settings.png' });
   await page.click('#saveSettings');
@@ -72,21 +96,28 @@ const assert = require('assert/strict');
   assert.equal(await visible('#exampleBanner'), false, 'banner still hidden after reload');
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('dwq.pricing.v1')));
   assert.equal(saved.minimumCharge, 800);
+  assert.equal(saved.setupFee, 80);
   assert.equal(saved.jobTypes[0].ratePerHa, 35);
-  await page.fill('#hectares', '10'); // 350 < 800 -> minimum applies
+  await page.fill('#hectares', '10'); // 350 < 800 -> minimum applies; 0 events so the fee is not added
   assert.equal(await page.textContent('#subtotal'), '$800.00');
+  await page.fill('#setupEvents', '2'); // 2 × $80 on top of the $800 minimum
+  assert.equal(await page.textContent('#subtotal'), '$960.00');
+  assert.match(await page.textContent('#breakdownRows'), /2 × \$80\.00/);
+  await page.fill('#setupEvents', '0');
 
   // Export → import round trip via file
   await page.click('#openSettings');
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('#exportSettings')]);
   const exported = require('fs').readFileSync(await dl.path(), 'utf8');
   assert.equal(JSON.parse(exported).pricing.minimumCharge, 800);
+  assert.equal(JSON.parse(exported).pricing.setupFee, 80);
   page.once('dialog', (d) => d.accept());
   await page.click('#resetSettings');
   assert.equal(await page.evaluate(() => localStorage.getItem('dwq.pricing.v1')), null);
   await page.setInputFiles('#importSettings', { name: 'p.json', mimeType: 'application/json', buffer: Buffer.from(exported) });
   await page.waitForFunction(() => !!localStorage.getItem('dwq.pricing.v1'));
   assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('dwq.pricing.v1')).minimumCharge), 800);
+  assert.equal(await page.evaluate(() => JSON.parse(localStorage.getItem('dwq.pricing.v1')).setupFee), 80);
 
   assert.deepEqual(errors, [], 'no console errors');
   await browser.close();

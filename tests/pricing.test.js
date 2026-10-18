@@ -85,6 +85,87 @@ test('client-supplied product adds no chemical cost', () => {
   assert.equal(r.meta.product.qty, 240);
 });
 
+test('set up / pack up / clean up: flat fee per event, on top of the minimum, GST applies, omitted at 0', () => {
+  // 5 ha spraying = 150, top-up 350 to the $500 minimum, plus 3 × $50 = 150 → 650 ex GST
+  const r = P.calculateQuote(base({ hectares: 5, setupEvents: 3 }), EXAMPLE);
+  assert.equal(line(r, 'application').amount, 150);
+  assert.equal(line(r, 'minimum').amount, 350);
+  assert.equal(line(r, 'setup').label, 'Set up / pack up / clean up');
+  assert.equal(line(r, 'setup').detail, '3 × $50.00');
+  assert.equal(line(r, 'setup').amount, 150);
+  assert.equal(r.subtotal, 650);
+  assert.equal(r.gst, 65);
+  assert.equal(r.total, 715);
+
+  const zero = P.calculateQuote(base({ hectares: 5, setupEvents: 0 }), EXAMPLE);
+  assert.equal(line(zero, 'setup'), undefined);
+  assert.equal(zero.subtotal, 500);
+  assert.equal(line(P.calculateQuote(base({ hectares: 5 }), EXAMPLE), 'setup'), undefined);
+
+  // Does not shrink the minimum top-up, and a custom fee is used
+  const withTravel = P.calculateQuote(base({
+    jobType: 'spreading', hectares: 10, rush: true, terrain: true, distanceKm: 60, setupEvents: 2
+  }), EXAMPLE);
+  assert.equal(line(withTravel, 'minimum').amount, 230);
+  assert.equal(line(withTravel, 'travel').amount, 140);
+  assert.equal(line(withTravel, 'setup').amount, 100);
+  assert.equal(withTravel.subtotal, 740); // 500 minimum + 140 travel + 100 setup
+
+  const custom = clone(EXAMPLE); custom.setupFee = 80;
+  const priced = P.calculateQuote(base({ hectares: 100, setupEvents: 2 }), custom);
+  assert.equal(line(priced, 'minimum'), undefined);
+  assert.equal(line(priced, 'setup').detail, '2 × $80.00');
+  assert.equal(line(priced, 'setup').amount, 160);
+  assert.equal(priced.subtotal, 3160);
+  assert.equal(priced.gst, 316);
+
+  const free = clone(EXAMPLE); free.setupFee = 0;
+  assert.equal(line(P.calculateQuote(base({ hectares: 100, setupEvents: 4 }), free), 'setup'), undefined);
+});
+
+test('set up events: whole numbers only, no negatives, max 100', () => {
+  const v = (o) => P.validateInput(base(o), EXAMPLE);
+  assert.equal(v({ setupEvents: 0 }).setupEvents, undefined);
+  assert.equal(v({ setupEvents: null }).setupEvents, undefined);
+  assert.equal(v({ setupEvents: 100 }).setupEvents, undefined);
+  assert.equal(v({ setupEvents: 2 }).setupEvents, undefined);
+  assert.match(v({ setupEvents: -1 }).setupEvents, /negative/);
+  assert.match(v({ setupEvents: 1.5 }).setupEvents, /whole number/);
+  assert.match(v({ setupEvents: 101 }).setupEvents, /too many/);
+  assert.match(v({ setupEvents: NaN }).setupEvents, /whole number/);
+  assert.equal(P.calculateQuote(base({ hectares: 10, setupEvents: 2.5 }), EXAMPLE).ok, false);
+  assert.equal(P.calculateQuote(base({ hectares: 10, setupEvents: -3 }), EXAMPLE).ok, false);
+});
+
+test('settings: setup fee validates, survives export/import, and defaults when an older file omits it', () => {
+  const bad = clone(EXAMPLE); bad.setupFee = -10;
+  const refused = S.savePricing(memStorage(), bad);
+  assert.equal(refused.ok, false);
+  assert.ok(refused.errors.some((msg) => /pack up/.test(msg)));
+
+  const legacy = clone(EXAMPLE);
+  delete legacy.setupFee;
+  assert.deepEqual(S.validatePricing(legacy), []);
+  const st = memStorage();
+  assert.ok(S.savePricing(st, legacy).ok);
+  const loaded = S.loadPricing(st, EXAMPLE);
+  assert.equal(loaded.pricing.setupFee, 50);
+  assert.equal(loaded.isExample, true);
+
+  const changed = clone(EXAMPLE); changed.setupFee = 75;
+  const text = S.exportPricing(changed, new Date('2026-10-18T00:00:00Z'));
+  assert.equal(JSON.parse(text).pricing.setupFee, 75);
+  const imp = S.parseImport(text);
+  assert.ok(imp.ok);
+  assert.equal(imp.pricing.setupFee, 75);
+
+  const oldFile = JSON.stringify({ pricing: legacy });
+  const filled = S.parseImport(oldFile, EXAMPLE);
+  assert.ok(filled.ok);
+  assert.equal(filled.pricing.setupFee, 50);
+  assert.equal(S.parseImport(oldFile).pricing.setupFee, undefined);
+});
+
 test('cents rounding stays exact', () => {
   const p = clone(EXAMPLE); p.jobTypes[0].ratePerHa = 27.35;
   const r = P.calculateQuote(base({ hectares: 33.3 }), p); // 910.755 -> 910.76
