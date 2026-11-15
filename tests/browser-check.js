@@ -40,6 +40,11 @@ const assert = require('assert/strict');
   const copy = await page.evaluate(() => window.DWApp.buildCopyText());
   assert.match(copy, /EXAMPLE PRICING/);
   assert.match(copy, /TOTAL \(inc GST\): \$7,810.00/);
+  assert.match(copy, /Quote valid for 14 days \(until /);
+  assert.match(copy, /Rate sheet EXAMPLE/);
+  assert.doesNotMatch(copy, /Internal|hire/i);
+  assert.match(await page.textContent('#quoteMeta'), /Valid 14 days/);
+  assert.equal(await visible('#internalPanel'), true, 'internal panel on screen');
 
   // Set up / pack up / clean up: 3 × $50 on top of the quote above, then back to 0 before the screenshot.
   assert.equal(await page.inputValue('#setupEvents'), '0');
@@ -63,12 +68,57 @@ const assert = require('assert/strict');
   assert.equal(await page.textContent('#total'), '$7,810.00');
   assert.equal((await page.textContent('#breakdownRows')).includes('Set up / pack up / clean up'), false);
 
+  // GST toggle + rounding
+  await page.uncheck('#gstOn');
+  assert.equal(await page.textContent('#gst'), '$0.00');
+  assert.equal(await page.textContent('#total'), '$7,100.00');
+  await page.check('#gstOn');
+  await page.selectOption('#roundTo', '100');
+  assert.equal(await page.textContent('#subtotal'), '$7,100.00'); // already a round $100
+  await page.fill('#setupEvents', '1'); // 7150 -> rounded up to 7200
+  assert.equal(await page.textContent('#subtotal'), '$7,200.00');
+  assert.match(await page.textContent('#breakdownRows'), /Rounding/);
+  await page.fill('#setupEvents', '0');
+  await page.selectOption('#roundTo', '10');
+
+  // Hire on a spray job: folded into the application line, internal panel shows recovery
+  await page.check('#hireOn');
+  await page.fill('#hireSupplier', 'Example Hire Co');
+  await page.locator('#hireSupplier').dispatchEvent('change');
+  assert.equal(await page.inputValue('#hireCost'), '2000', 'known supplier prefills cost');
+  await page.fill('#hireRecovery', '50');
+  const rowsText = await page.textContent('#breakdownRows');
+  assert.doesNotMatch(rowsText, /hire/i, 'no hire line on the quote');
+  assert.match(await page.textContent('#internalPanel'), /Shortfall you absorb/);
+  assert.match(await page.textContent('#warnings'), /WARNING/);
+  await page.fill('#hireRecovery', '100');
+  await page.uncheck('#hireOn');
+
   // Screenshot at phone width: grow the viewport to the full page height so sticky/fixed bars sit where they would on a phone.
   await page.evaluate(() => window.scrollTo(0, 0));
   const h = await page.evaluate(() => document.documentElement.scrollHeight);
   await page.setViewportSize({ width: 390, height: h });
   await page.screenshot({ path: path.resolve(__dirname, '..', 'screenshot.png') });
   await page.setViewportSize({ width: 390, height: 844 });
+
+  // LiDAR job (example rates): half day + 12 h processing, then hourly with a hired unit at 0% recovery
+  await page.click('#newQuote');
+  await page.click('#jobTypeGroup label:has-text("LiDAR")');
+  assert.equal(await visible('#lidarFields'), true);
+  assert.equal(await visible('#agFields'), false);
+  assert.equal(await visible('#lidarExampleNote'), true);
+  await page.fill('#processingHours', '12');
+  // 2000 capture + 1080 processing = 3080
+  assert.equal(await page.textContent('#subtotal'), '$3,080.00');
+  await page.click('#lidarModeGroup label:has-text("Hourly")');
+  await page.fill('#lidarHours', '3');
+  await page.check('#hireOn');
+  await page.fill('#hireCost', '2000');
+  await page.fill('#hireRecovery', '0');
+  assert.match(await page.textContent('#warnings'), /STRONG WARNING/);
+  assert.equal(await page.locator('#copyQuote').isDisabled(), false, 'warnings never block the quote');
+  await page.fill('#hireRecovery', '100');
+  await page.screenshot({ path: '/tmp/pwtest/lidar.png', fullPage: true });
 
   // Print view: build it (window.print stubbed headless), render to PDF and check it is one page.
   await page.evaluate(() => { window.print = () => {}; });
@@ -88,7 +138,7 @@ const assert = require('assert/strict');
   assert.equal(await page.inputValue('[data-path="setupFee"]'), '50');
   await page.fill('[data-path="minimumCharge"]', '800');
   await page.fill('[data-path="setupFee"]', '80');
-  await page.locator('#jobTypeRows .srow').first().locator('input[type="number"]').fill('35');
+  await page.locator('#jobTypeRows .srow').first().locator('input[type="number"]').first().fill('35');
   await page.screenshot({ path: '/tmp/pwtest/settings.png' });
   await page.click('#saveSettings');
   assert.equal(await visible('#exampleBanner'), false, 'banner hidden after custom pricing saved');
@@ -98,12 +148,23 @@ const assert = require('assert/strict');
   assert.equal(saved.minimumCharge, 800);
   assert.equal(saved.setupFee, 80);
   assert.equal(saved.jobTypes[0].ratePerHa, 35);
-  await page.fill('#hectares', '10'); // 350 < 800 -> minimum applies; 0 events so the fee is not added
+  await page.fill('#hectares', '10'); // 350 < 800 -> minimum applies
   assert.equal(await page.textContent('#subtotal'), '$800.00');
   await page.fill('#setupEvents', '2'); // 2 × $80 on top of the $800 minimum
   assert.equal(await page.textContent('#subtotal'), '$960.00');
   assert.match(await page.textContent('#breakdownRows'), /2 × \$80\.00/);
   await page.fill('#setupEvents', '0');
+
+  // Approved rate-sheet version mismatch disables Copy quote
+  await page.click('#openSettings');
+  await page.fill('#approvedVersion', 'v-something-else');
+  await page.click('#saveSettings');
+  assert.equal(await visible('#rateSheetWarning'), true);
+  assert.equal(await page.locator('#copyQuote').isDisabled(), true, 'copy disabled on version mismatch');
+  await page.click('#openSettings');
+  await page.fill('#approvedVersion', '');
+  await page.click('#saveSettings');
+  assert.equal(await page.locator('#copyQuote').isDisabled(), false);
 
   // Export → import round trip via file
   await page.click('#openSettings');

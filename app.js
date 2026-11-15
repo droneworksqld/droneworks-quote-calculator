@@ -9,10 +9,11 @@
   var CLIENT_PRODUCT = '__client__';
 
   var store = safeStorage();
-  var state = { pricing: null, isExample: true, quoteNo: '', quoteCommitted: false, result: null, rateEdited: false, touched: {} };
+  var state = { pricing: null, isExample: true, quoteNo: '', quoteCommitted: false, result: null, rateEdited: false, touched: {}, sheet: { ok: true } };
 
   function $(id) { return document.getElementById(id); }
   function money(n) { return n.toLocaleString('en-AU', { style: 'currency', currency: 'AUD' }); }
+  function numOr(id) { return num($(id).value); }
   function qty(n) { return n.toLocaleString('en-AU', { maximumFractionDigits: 2 }); }
   function num(v) { if (v === '' || v === null || v === undefined) return null; var n = Number(v); return isFinite(n) ? n : NaN; }
   function el(tag, attrs, text) {
@@ -41,6 +42,42 @@
     var w = $('loadWarning');
     w.hidden = !res.error;
     w.textContent = res.error || '';
+    checkSheet();
+    buildSupplierList();
+  }
+
+  function checkSheet() {
+    state.sheet = S.checkRateSheet(state.pricing, S.getApprovedVersion(store));
+    var w = $('rateSheetWarning');
+    w.hidden = state.sheet.ok;
+    w.textContent = state.sheet.ok ? '' : '⚠ ' + state.sheet.message;
+  }
+
+  function rateSheetStamp() {
+    var rs = state.pricing.rateSheet || {};
+    return 'Rate sheet ' + (rs.version || 'UNVERSIONED') + (rs.date ? ' (' + fmtIsoDate(rs.date) + ')' : '');
+  }
+  function fmtIsoDate(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s || '');
+    return m ? m[3] + '/' + m[2] + '/' + m[1] : s;
+  }
+
+  function buildSupplierList() {
+    var dl = $('hireSupplierList'); dl.innerHTML = '';
+    ((state.pricing.hire && state.pricing.hire.suppliers) || []).forEach(function (s) { dl.appendChild(el('option', { value: s.name })); });
+  }
+
+  function currentJob() { return P.findJobType(state.pricing, getRadio('jobType')); }
+  function isLidarJob() { var j = currentJob(); return !!j && j.kind === 'lidar'; }
+
+  /** Fill per-quote defaults (labour rate, overhead, margin, rounding, validity) from settings. */
+  function prefillDefaults() {
+    var p = state.pricing;
+    $('labourRate').value = p.labourRatePerHour !== undefined ? p.labourRatePerHour : '';
+    $('overhead').value = p.overheadPerJob !== undefined ? p.overheadPerJob : '';
+    $('marginPct').value = p.targetMarginPct !== undefined ? p.targetMarginPct : '';
+    $('roundTo').value = String(p.defaultRoundTo || 1);
+    $('validDays').value = p.quoteValidityDays !== undefined ? p.quoteValidityDays : 14;
   }
 
   // ---------- Build form options ----------
@@ -48,7 +85,7 @@
     var group = $('jobTypeGroup');
     var current = getRadio('jobType');
     group.innerHTML = '';
-    group.classList.toggle('two', state.pricing.jobTypes.length === 2);
+    group.classList.toggle('two', state.pricing.jobTypes.length === 2 || state.pricing.jobTypes.length === 4);
     state.pricing.jobTypes.forEach(function (j, i) {
       var lab = el('label', { 'class': 'seg' });
       var inp = el('input', { type: 'radio', name: 'jobType', value: j.id });
@@ -103,7 +140,31 @@
       rush: $('rush').checked,
       terrain: $('terrain').checked,
       setupEvents: num($('setupEvents').value),
-      notes: $('notes').value.trim()
+      notes: $('notes').value.trim(),
+      lidarMode: getRadio('lidarMode'),
+      lidarHours: numOr('lidarHours'),
+      lidarRate: numOr('lidarRate'),
+      processingHours: numOr('processingHours'),
+      hoursPlanning: numOr('hoursPlanning'),
+      hoursTravel: numOr('hoursTravel'),
+      hoursOnsite: numOr('hoursOnsite'),
+      hoursProcessing: numOr('hoursProcessing'),
+      labourRate: numOr('labourRate'),
+      crewCost: numOr('crewCost'),
+      overhead: numOr('overhead'),
+      marginPct: numOr('marginPct'),
+      roundTo: Number($('roundTo').value),
+      gst: $('gstOn').checked,
+      validDays: numOr('validDays'),
+      hire: {
+        on: $('hireOn').checked,
+        supplier: $('hireSupplier').value.trim(),
+        cost: numOr('hireCost'),
+        period: $('hirePeriod').value,
+        recoveryPct: numOr('hireRecovery'),
+        jobsSharing: Number(getRadio('hireJobs') || 1),
+        covered: $('hireCovered').checked
+      }
     };
   }
 
@@ -140,6 +201,40 @@
     $('rushPct').textContent = '+' + p.surcharges.rushPct + '%';
     $('terrainPct').textContent = '+' + p.surcharges.terrainPct + '%';
     $('setupHint').textContent = 'Flat fee of ' + money(isFinite(p.setupFee) ? p.setupFee : 0) + ' per event, on top of the minimum job charge.';
+
+    // LiDAR vs per-hectare jobs
+    var lidar = isLidarJob();
+    var L = p.lidar || {};
+    $('lidarFields').hidden = !lidar;
+    $('agFields').hidden = lidar;
+    $('haOpt').hidden = !lidar;
+    $('lidarExampleNote').hidden = !(lidar && L.example);
+    var mode = getRadio('lidarMode');
+    $('lidarHoursField').hidden = mode !== 'hourly';
+    var hireBooked = $('hireOn').checked && !$('hireCovered').checked;
+    if (mode === 'half') {
+      $('lidarRateLabel').firstChild.textContent = 'Half-day price ';
+      $('lidarRateHint').textContent = 'Default ' + money(L.halfDayPrice || 0) + ' · floor ' + money(L.halfDayFloor || 0) + '. Leave blank for the default.';
+    } else if (mode === 'full') {
+      $('lidarRateLabel').firstChild.textContent = 'Full-day price ';
+      $('lidarRateHint').textContent = 'Target ' + money(L.fullDayTarget || 0) + ' · never below ' + money(L.fullDayFloor || 0) + '. Leave blank for the target.';
+    } else {
+      $('lidarRateLabel').firstChild.textContent = 'Hourly rate ';
+      var h = 'Reference ' + money(L.hourlyRate || 0) + '/h · floor ' + money(L.hourlyFloor || 0) + '/h.';
+      if (hireBooked) h += ' Hired unit: at least the half-day floor ' + money(L.halfDayFloor || 0) + '.';
+      else if (L.minBillableHoursEnabled && L.minBillableHours > 0) h += ' Minimum ' + qty(L.minBillableHours) + ' h billable (owned kit / covered hire week).';
+      $('lidarRateHint').textContent = h;
+    }
+    var typ = L.processingHoursTypical;
+    $('processingHint').textContent = money(L.processingPerHour || 0) + '/h' + (typ && typ.length === 2 ? ' · typically ' + typ[0] + '–' + typ[1] + ' h' : '') + '. Shown as its own line.';
+
+    $('hireFields').hidden = !$('hireOn').checked;
+
+    var lr = num($('labourRate').value) || 0;
+    var hrs = ['hoursPlanning', 'hoursTravel', 'hoursOnsite', 'hoursProcessing'].reduce(function (s, id) { return s + (num($(id).value) || 0); }, 0);
+    var crew = num($('crewCost').value) || 0;
+    $('labourHint').textContent = (currentJob() ? shortLabel(currentJob().label) + ' labour subtotal: ' : 'Labour subtotal: ') +
+      money(P.round2(hrs * lr + crew)) + ' (' + qty(hrs) + ' h @ ' + money(lr) + '/h' + (crew ? ' + ' + money(crew) + ' crew' : '') + ')';
   }
 
   function render() {
@@ -161,12 +256,12 @@
     $('quoteNo').textContent = state.quoteNo;
     $('resultEmpty').hidden = res.ok;
     $('resultBody').hidden = !res.ok;
-    $('copyQuote').disabled = !res.ok;
+    $('copyQuote').disabled = !res.ok || !state.sheet.ok;
     $('printQuote').disabled = !res.ok;
     if (!res.ok) {
       var keys = Object.keys(errs);
-      $('resultEmpty').textContent = (input.hectares === null)
-        ? 'Enter the area in hectares to see a price.'
+      $('resultEmpty').textContent = (input.hectares === null && (errs.hectares || !isLidarJob()))
+        ? (isLidarJob() ? 'Enter the LiDAR details to see a price.' : 'Enter the area in hectares to see a price.')
         : 'To finish the quote: ' + errs[keys[0]];
       return;
     }
@@ -183,7 +278,7 @@
       tr.appendChild(el('td', null, money(l.amount)));
       tbody.appendChild(tr);
     });
-    if (input.supply === 'client') {
+    if (input.supply === 'client' && !res.meta.isLidar) {
       var tr2 = el('tr', { 'class': 'muted-row' });
       var th2 = el('th', { scope: 'row' });
       var pi = res.meta.product;
@@ -194,11 +289,78 @@
       tbody.appendChild(tr2);
     }
     $('subtotal').textContent = money(res.subtotal);
-    $('gstLabel').textContent = 'GST (' + qty(res.meta.gstRate * 100) + '%)';
+    $('gstLabel').textContent = gstLabel(res);
     $('gst').textContent = money(res.gst);
     $('total').textContent = money(res.total);
     $('totalAmount').textContent = money(res.total);
-    $('perHa').textContent = money(res.perHaInc) + '/ha inc GST · ' + money(res.perHaEx) + '/ha ex GST';
+    $('perHa').textContent = (res.perHaInc !== null ? money(res.perHaInc) + '/ha inc GST · ' + money(res.perHaEx) + '/ha ex GST · ' : '') + money(res.subtotal) + ' ex GST';
+    var s = quoteSummary();
+    $('quoteMeta').textContent = (s.validUntil ? 'Valid ' + s.validDays + ' days, until ' + s.validUntil + ' · ' : '') + s.rateSheet + (quoteIsExample() ? ' · EXAMPLE PRICING' : '');
+    renderWarnings(res);
+    renderInternal(res);
+  }
+
+  function gstLabel(r) { return r.meta.gstOn ? 'GST (' + qty(r.meta.gstRate * 100) + '%)' : 'GST (not charged)'; }
+
+  function quoteIsExample() {
+    var r = state.result;
+    if (state.isExample) return true;
+    if (!r) return false;
+    if (r.meta.jobType.example) return true;
+    return !!(r.meta.isLidar && state.pricing.lidar && state.pricing.lidar.example);
+  }
+
+  function renderWarnings(res) {
+    var box = $('warnings'); box.innerHTML = '';
+    var list = (res.warnings || []).slice();
+    if (!state.sheet.ok) list.unshift({ level: 'danger', text: state.sheet.message });
+    list.forEach(function (w) { box.appendChild(el('div', { 'class': 'warn warn-' + w.level, role: w.level === 'info' ? null : 'alert' }, w.text)); });
+  }
+
+  function kvTable(rows) {
+    var t = el('table', { 'class': 'kv' }); var tb = el('tbody');
+    rows.forEach(function (r) {
+      if (!r) return;
+      var tr = el('tr', r[2] ? { 'class': r[2] } : null); tr.appendChild(el('th', { scope: 'row' }, r[0])); tr.appendChild(el('td', null, r[1])); tb.appendChild(tr);
+    });
+    t.appendChild(tb); return t;
+  }
+
+  function renderInternal(res) {
+    var box = $('internalPanel'); box.innerHTML = '';
+    var tm = res.meta.time;
+    box.appendChild(el('h3', null, 'Internal — costs & profit (not printed or copied)'));
+    var hrs = tm.hours;
+    box.appendChild(kvTable([
+      [shortLabel(res.meta.jobType.label) + ' labour (' + qty(hrs.total) + ' h @ ' + money(tm.labourRate) + '/h)', money(tm.labourCost)],
+      tm.crew ? ['Extra crew / subcontractor', money(tm.crew)] : null,
+      ['Labour subtotal', money(tm.labourSubtotal), 'sub'],
+      ['Overhead / equipment allowance', money(tm.overhead)],
+      tm.productCost ? ['Product at cost', money(tm.productCost)] : null,
+      res.meta.hire && !res.meta.hire.covered ? ['Hire share' + (res.meta.hire.jobsSharing > 1 ? ' (1 of ' + res.meta.hire.jobsSharing + ' jobs)' : ''), money(res.meta.hire.share)] : null,
+      res.meta.hire && res.meta.hire.extras ? ['Hire-week insurance, consumables & fuel', money(res.meta.hire.extras)] : null,
+      ['Total costs', money(tm.totalCosts), 'sub'],
+      ['Rate-card price (ex GST)', money(tm.rateCard)],
+      ['Price for ' + qty(tm.marginPct) + '% target margin', money(tm.targetPrice)],
+      ['Quote (ex GST)', money(res.subtotal), 'sub'],
+      ['Profit', money(tm.profit) + ' (' + qty(tm.marginAchievedPct) + '%)', tm.profit < 0 ? 'neg' : 'pos']
+    ]));
+    var h = res.meta.hire;
+    if (h) {
+      box.appendChild(el('h3', null, 'Hire recovery'));
+      if (h.covered) {
+        box.appendChild(el('p', { 'class': 'hint' }, 'Hire week already covered by another job — no hire recovered on this quote' + (h.supplier ? ' (' + h.supplier + ')' : '') + '.'));
+      } else {
+        box.appendChild(kvTable([
+          ['Hire cost' + (h.supplier ? ' — ' + h.supplier : '') + (h.period ? ' (per ' + h.period + ')' : ''), money(h.cost)],
+          h.jobsSharing > 1 ? ['This job\'s share (' + h.jobsSharing + ' jobs)', money(h.share)] : null,
+          ['Recovered by this quote (' + qty(h.recoveryPct) + '%)', money(h.recovered)],
+          ['Folded into the rate', h.perHour !== null ? money(h.perHour) + '/h over ' + qty(h.onsiteHours) + ' h on site' : 'on-site hours unknown'],
+          ['Shortfall you absorb', money(h.shortfall), h.shortfall > 0 ? 'neg' : ''],
+          ['Hire-week cash break-even' + (h.jobsSharing > 1 ? ' (share)' : ''), money(h.breakEven)]
+        ]));
+      }
+    }
   }
 
   // ---------- Quote output (copy / print) ----------
@@ -217,40 +379,48 @@
   function quoteSummary() {
     var r = state.result, inp = state.input, now = new Date();
     var pi = r.meta.product;
-    var productLine = pi.name + (pi.rate ? ' @ ' + qty(pi.rate) + ' ' + pi.unit + '/ha' : '') +
+    var validDays = isFinite(inp.validDays) && inp.validDays !== null ? inp.validDays : (state.pricing.quoteValidityDays || 0);
+    var productLine = !pi ? '' : pi.name + (pi.rate ? ' @ ' + qty(pi.rate) + ' ' + pi.unit + '/ha' : '') +
       (pi.suppliedBy === 'client' ? ' (supplied by client)' : ' (supplied by ' + B.name + ')');
     return {
       date: fmtDate(now),
-      validUntil: state.pricing.quoteValidityDays ? fmtDate(addDays(now, state.pricing.quoteValidityDays)) : null,
+      validDays: validDays,
+      validUntil: validDays ? fmtDate(addDays(now, validDays)) : null,
       client: inp.client,
-      job: r.meta.jobType.label + ' — ' + qty(r.meta.hectares) + ' ha',
+      job: r.meta.isLidar
+        ? r.meta.jobType.label + ' — ' + ({ half: 'half day', full: 'full day', hourly: 'hourly' }[r.meta.lidar.mode] || '') + (r.meta.hectares ? ', ' + qty(r.meta.hectares) + ' ha' : '')
+        : r.meta.jobType.label + ' — ' + qty(r.meta.hectares) + ' ha',
       product: productLine,
-      notes: inp.notes
+      notes: inp.notes,
+      rateSheet: rateSheetStamp()
     };
   }
 
   function buildCopyText() {
     var r = state.result, s = quoteSummary(), out = [];
-    if (state.isExample) out.push('*** EXAMPLE PRICING – NOT REAL RATES ***', '');
+    if (quoteIsExample()) out.push('*** EXAMPLE PRICING – NOT REAL RATES ***', '');
     out.push(B.name + ' — Quote (estimate)');
-    out.push('Quote no: ' + state.quoteNo, 'Date: ' + s.date + (s.validUntil ? '  (valid until ' + s.validUntil + ')' : ''));
+    out.push('Quote no: ' + state.quoteNo, 'Date: ' + s.date);
+    if (s.validUntil) out.push('Quote valid for ' + s.validDays + ' days (until ' + s.validUntil + ')');
     if (s.client) out.push('Client / paddock: ' + s.client);
-    out.push('Job: ' + s.job, 'Product: ' + s.product);
+    out.push('Job: ' + s.job);
+    if (s.product) out.push('Product: ' + s.product);
     if (s.notes) out.push('Notes: ' + s.notes);
     out.push('');
     r.lines.forEach(function (l) { out.push(l.label + ': ' + money(l.amount), '   ' + l.detail); });
     out.push('');
     out.push('Subtotal (ex GST): ' + money(r.subtotal));
-    out.push('GST (' + qty(r.meta.gstRate * 100) + '%): ' + money(r.gst));
+    out.push(gstLabel(r) + ': ' + money(r.gst));
     out.push('TOTAL (inc GST): ' + money(r.total));
-    out.push('Price per hectare: ' + money(r.perHaInc) + ' inc GST (' + money(r.perHaEx) + ' ex GST)');
-    out.push('', B.disclaimer, '');
+    if (r.perHaInc !== null) out.push('Price per hectare: ' + money(r.perHaInc) + ' inc GST (' + money(r.perHaEx) + ' ex GST)');
+    out.push('', B.disclaimer, '', s.rateSheet + ' · ' + state.quoteNo, '');
     out.push(B.contactName + ' · ' + B.phone + ' · ' + B.email + ' · ' + B.website);
     return out.join('\n');
   }
 
   function copyQuote() {
     if (!state.result) return;
+    if (!state.sheet.ok) { toast('Copy disabled — rate sheet not approved'); return; }
     ensureQuoteNumber();
     var text = buildCopyText();
     var done = function () { toast('Quote copied to clipboard'); };
@@ -268,7 +438,7 @@
   function buildPrint() {
     var r = state.result, s = quoteSummary(), root = $('printView');
     root.innerHTML = '';
-    if (state.isExample) root.appendChild(el('div', { 'class': 'pq-example' }, 'EXAMPLE PRICING – NOT REAL RATES'));
+    if (quoteIsExample()) root.appendChild(el('div', { 'class': 'pq-example' }, 'EXAMPLE PRICING – NOT REAL RATES'));
     var head = el('header', { 'class': 'pq-head' });
     var left = el('div');
     left.appendChild(el('div', { 'class': 'pq-name' }, B.name));
@@ -278,7 +448,7 @@
     if (B.abn) left.appendChild(el('div', { 'class': 'pq-contact' }, 'ABN ' + B.abn));
     var right = el('div', { 'class': 'pq-meta' });
     right.appendChild(el('div', { 'class': 'pq-doc' }, 'QUOTE'));
-    [['Quote no', state.quoteNo], ['Date', s.date], ['Valid until', s.validUntil]].forEach(function (kv) {
+    [['Quote no', state.quoteNo], ['Date', s.date], ['Valid for', s.validUntil ? s.validDays + ' days' : null], ['Valid until', s.validUntil]].forEach(function (kv) {
       if (!kv[1]) return; var d = el('div'); d.appendChild(el('span', null, kv[0] + ': ')); d.appendChild(el('strong', null, kv[1])); right.appendChild(d);
     });
     head.appendChild(left); head.appendChild(right); root.appendChild(head);
@@ -298,10 +468,10 @@
     });
     t.appendChild(tb);
     var tf = el('tfoot');
-    [['Subtotal (ex GST)', r.subtotal], ['GST (' + qty(r.meta.gstRate * 100) + '%)', r.gst], ['Total (inc GST)', r.total]].forEach(function (kv, i) {
+    [['Subtotal (ex GST)', r.subtotal], [gstLabel(r), r.gst], ['Total (inc GST)', r.total]].forEach(function (kv, i) {
       var tr = el('tr', i === 2 ? { 'class': 'pq-grand' } : null); tr.appendChild(el('td', null, kv[0])); tr.appendChild(el('td', null, money(kv[1]))); tf.appendChild(tr);
     });
-    var ph = el('tr', { 'class': 'pq-perha' }); ph.appendChild(el('td', null, 'Price per hectare')); ph.appendChild(el('td', null, money(r.perHaInc) + ' inc GST')); tf.appendChild(ph);
+    if (r.perHaInc !== null) { var ph = el('tr', { 'class': 'pq-perha' }); ph.appendChild(el('td', null, 'Price per hectare')); ph.appendChild(el('td', null, money(r.perHaInc) + ' inc GST')); tf.appendChild(ph); }
     t.appendChild(tf); root.appendChild(t);
 
     var lic = el('section', { 'class': 'pq-lic' });
@@ -310,6 +480,7 @@
     root.appendChild(lic);
     root.appendChild(el('p', { 'class': 'pq-disc' }, B.disclaimer));
     root.appendChild(el('footer', { 'class': 'pq-foot' }, B.name + ' · ' + B.region + ' · ' + B.phone + ' · ' + B.email));
+    root.appendChild(el('div', { 'class': 'pq-stamp' }, s.rateSheet + ' · ' + state.quoteNo));
   }
 
   function printQuote() {
@@ -324,7 +495,7 @@
     state.touched = {}; state.rateEdited = false; state.unitEdited = false;
     state.quoteCommitted = false;
     state.quoteNo = S.peekQuoteNumber(store, new Date());
-    buildJobTypes(); buildProducts(); render();
+    buildJobTypes(); buildProducts(); prefillDefaults(); render();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -351,8 +522,10 @@
 
   function fillSettings() {
     $('settingsExampleNote').hidden = !S.samePricing(draft, EXAMPLE);
+    $('approvedVersion').value = S.getApprovedVersion(store);
     document.querySelectorAll('#settingsForm [data-path]').forEach(function (inp) {
       var v = getPath(draft, inp.getAttribute('data-path'));
+      if (inp.getAttribute('data-type') === 'bool') { inp.checked = !!v; return; }
       if (inp.hasAttribute('data-percent') && typeof v === 'number') v = Math.round(v * 10000) / 100;
       inp.value = v === undefined || v === null ? '' : v;
     });
@@ -377,8 +550,14 @@
       var rate = numInput(j.ratePerHa); rate.addEventListener('input', function () { j.ratePerHa = num(rate.value); });
       var unit = unitSelect(j.unit, 'Default unit'); unit.addEventListener('change', function () { j.unit = unit.value; });
       row.appendChild(labelled('Name', name, 'wide'));
-      row.appendChild(labelled('$ per ha', rate));
-      row.appendChild(labelled('Rate unit', unit));
+      if (j.kind === 'lidar') {
+        row.appendChild(el('p', { 'class': 'hint wide' }, 'LiDAR — rates are in the LiDAR section below.'));
+      } else {
+        var hph = numInput(j.haPerHour); hph.addEventListener('input', function () { j.haPerHour = num(hph.value); });
+        row.appendChild(labelled('$ per ha', rate));
+        row.appendChild(labelled('Rate unit', unit));
+        row.appendChild(labelled('ha per hour (est.)', hph));
+      }
       row.appendChild(removeBtn(function () {
         if (draft.jobTypes.length <= 1) { showSettingsErrors(['You need at least one job type.']); return; }
         draft.jobTypes.splice(i, 1); renderJobRows();
@@ -414,6 +593,9 @@
 
   function collectGeneral() {
     document.querySelectorAll('#settingsForm [data-path]').forEach(function (inp) {
+      var type = inp.getAttribute('data-type');
+      if (type === 'bool') { setPath(draft, inp.getAttribute('data-path'), inp.checked); return; }
+      if (type === 'text') { setPath(draft, inp.getAttribute('data-path'), inp.value.trim()); return; }
       var v = num(inp.value);
       if (v !== null && !isNaN(v) && inp.hasAttribute('data-percent')) v = v / 100;
       setPath(draft, inp.getAttribute('data-path'), v === null ? NaN : v);
@@ -434,13 +616,14 @@
     collectGeneral();
     var res = S.savePricing(store, draft);
     if (!res.ok) { showSettingsErrors(res.errors); return; }
+    S.setApprovedVersion(store, $('approvedVersion').value);
     applyNewPricing();
     closeSettings();
     toast(state.isExample ? 'Saved (still the example numbers)' : 'Pricing saved on this device');
   }
 
   function applyNewPricing() {
-    loadSettings(); buildJobTypes(); buildProducts(); render();
+    loadSettings(); buildJobTypes(); buildProducts(); prefillDefaults(); render();
   }
 
   function exportSettings() {
@@ -448,7 +631,8 @@
     var errs = S.validatePricing(draft);
     if (errs.length) { showSettingsErrors(errs); return; }
     var blob = new Blob([S.exportPricing(draft)], { type: 'application/json' });
-    var a = el('a', { href: URL.createObjectURL(blob), download: 'droneworks-pricing-' + new Date().toISOString().slice(0, 10) + '.json' });
+    var ver = (draft.rateSheet && draft.rateSheet.version ? '-' + draft.rateSheet.version.replace(/[^A-Za-z0-9._-]/g, '') : '');
+    var a = el('a', { href: URL.createObjectURL(blob), download: 'droneworks-pricing' + ver + '-' + new Date().toISOString().slice(0, 10) + '.json' });
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
     toast('Settings exported — keep this file private');
@@ -460,9 +644,10 @@
       var res = S.parseImport(String(reader.result), EXAMPLE);
       if (!res.ok) { showSettingsErrors(['Import failed:'].concat(res.errors)); return; }
       S.savePricing(store, res.pricing);
-      draft = clone(res.pricing); fillSettings(); showSettingsErrors([]);
       applyNewPricing();
-      toast('Settings imported and saved');
+      draft = clone(state.pricing); fillSettings(); showSettingsErrors([]);
+      var rs = state.pricing.rateSheet || {};
+      toast('Imported rate sheet ' + (rs.version || '') + (state.sheet.ok ? '' : ' — not the approved version'));
     };
     reader.readAsText(file);
   }
@@ -470,8 +655,8 @@
   function resetSettings() {
     if (!window.confirm('Remove your saved pricing from this device and go back to the example numbers?')) return;
     S.clearPricing(store);
-    draft = clone(EXAMPLE); fillSettings(); showSettingsErrors([]);
     applyNewPricing();
+    draft = clone(state.pricing); fillSettings(); showSettingsErrors([]);
     toast('Reset to example pricing');
   }
 
@@ -489,6 +674,7 @@
     form.addEventListener('change', function (e) {
       var t = e.target;
       if (t.name === 'jobType') { buildProducts(); state.unitEdited = false; prefillRate(); }
+      if (t.id === 'hireSupplier') prefillHire();
       if (t.id === 'product') {
         state.touched.productId = true;
         if (P.findProduct(state.pricing, t.value)) setRadio('supply', 'droneworks');
@@ -516,6 +702,14 @@
     $('addProduct').addEventListener('click', function () { draft.products.push({ id: uid('prod'), name: '', unit: 'L', unitPrice: 0, defaultRate: 0, jobTypes: [] }); renderProductRows(); });
   }
 
+  function prefillHire() {
+    var name = $('hireSupplier').value.trim().toLowerCase();
+    var sup = ((state.pricing.hire && state.pricing.hire.suppliers) || []).filter(function (s) { return s.name.toLowerCase() === name; })[0];
+    if (!sup) return;
+    if ($('hireCost').value === '') $('hireCost').value = sup.cost;
+    if (sup.period) $('hirePeriod').value = sup.period;
+  }
+
   function prefillRate(force) {
     var p = P.findProduct(state.pricing, $('product').value);
     if (p && (force || !state.rateEdited)) { $('appRate').value = p.defaultRate || ''; state.rateEdited = false; }
@@ -525,6 +719,7 @@
   loadSettings();
   buildJobTypes();
   buildProducts();
+  prefillDefaults();
   state.quoteNo = S.peekQuoteNumber(store, new Date());
   bind();
   render();

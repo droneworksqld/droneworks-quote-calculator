@@ -6,3 +6,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.log
+# Private rate sheets (real LiDAR / hire rates) — never commit
+*rates*.json
+*rate-sheet*.json
+private/

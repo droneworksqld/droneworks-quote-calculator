@@ -12,6 +12,7 @@
 
   var PRICING_KEY = 'dwq.pricing.v1';
   var COUNTER_KEY = 'dwq.quoteCounter.v1';
+  var APPROVED_KEY = 'dwq.approvedRateSheet.v1'; // kept separate so importing a sheet can't approve itself
   var EXPORT_APP = 'droneworks-quote-calculator';
 
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
@@ -30,8 +31,27 @@
     if (!p.travel || !isNonNeg(p.travel.freeKm)) e.push('Free km must be 0 or more.');
     if (!p.surcharges || !isNonNeg(p.surcharges.rushPct)) e.push('Rush surcharge must be 0% or more.');
     if (!p.surcharges || !isNonNeg(p.surcharges.terrainPct)) e.push('Terrain surcharge must be 0% or more.');
-    // Missing setupFee is allowed so settings saved before this field existed still load.
+    // Missing newer fields are allowed so settings saved before they existed still load.
     if (p.setupFee !== undefined && p.setupFee !== null && !isNonNeg(p.setupFee)) e.push('Set up / pack up / clean up fee must be 0 or more.');
+    ['labourRatePerHour', 'overheadPerJob', 'defaultRoundTo'].forEach(function (k) {
+      if (p[k] !== undefined && !isNonNeg(p[k])) e.push(k + ' must be 0 or more.');
+    });
+    if (p.defaultRoundTo !== undefined && [0, 1, 10, 50, 100].indexOf(p.defaultRoundTo) === -1) e.push('Default rounding must be $1, $10, $50 or $100.');
+    if (p.targetMarginPct !== undefined && (!isNonNeg(p.targetMarginPct) || p.targetMarginPct >= 95)) e.push('Target margin must be between 0% and 94%.');
+    if (p.rateSheet !== undefined && (!p.rateSheet || typeof p.rateSheet.version !== 'string')) e.push('Rate sheet needs a version.');
+    if (p.lidar !== undefined) {
+      if (!p.lidar || typeof p.lidar !== 'object') e.push('LiDAR rates are not valid.');
+      else ['halfDayPrice', 'halfDayFloor', 'halfDayHours', 'fullDayTarget', 'fullDayFloor', 'fullDayHours', 'hourlyRate', 'hourlyFloor', 'processingPerHour', 'minBillableHours', 'suggestFullDayAboveHours'].forEach(function (k) {
+        if (p.lidar[k] !== undefined && !isNonNeg(p.lidar[k])) e.push('LiDAR ' + k + ' must be 0 or more.');
+      });
+    }
+    if (p.hire !== undefined) {
+      if (!p.hire || typeof p.hire !== 'object') e.push('Hire settings are not valid.');
+      else {
+        ['insurance', 'consumables', 'fuel'].forEach(function (k) { if (p.hire[k] !== undefined && !isNonNeg(p.hire[k])) e.push('Hire ' + k + ' must be 0 or more.'); });
+        if (p.hire.suppliers !== undefined && !Array.isArray(p.hire.suppliers)) e.push('Hire suppliers must be a list.');
+      }
+    }
 
     if (!Array.isArray(p.jobTypes) || p.jobTypes.length === 0) e.push('Add at least one job type.');
     else {
@@ -42,8 +62,10 @@
         else if (ids[j.id]) e.push(n + ': duplicate id "' + j.id + '".');
         else ids[j.id] = true;
         if (!j || typeof j.label !== 'string' || !j.label.trim()) e.push(n + ': needs a name.');
-        if (!j || !isNonNeg(j.ratePerHa)) e.push(n + ': $/ha must be 0 or more.');
-        if (!j || (j.unit !== 'L' && j.unit !== 'kg')) e.push(n + ': unit must be L or kg.');
+        var isL = j && j.kind === 'lidar';
+        if (!j || (!isL && !isNonNeg(j.ratePerHa))) e.push(n + ': $/ha must be 0 or more.');
+        if (!j || (!isL && j.unit !== 'L' && j.unit !== 'kg')) e.push(n + ': unit must be L or kg.');
+        if (j && j.haPerHour !== undefined && j.haPerHour !== null && !isNonNeg(j.haPerHour)) e.push(n + ': ha per hour must be 0 or more.');
       });
     }
 
@@ -80,15 +102,6 @@
     return o;
   }
 
-  /** Fill fields added after a settings file was saved, using the example defaults. */
-  function applyDefaults(p, example) {
-    var out = clone(p);
-    if (out.setupFee === undefined || out.setupFee === null) {
-      out.setupFee = example && isNonNeg(example.setupFee) ? example.setupFee : 0;
-    }
-    return out;
-  }
-
   /**
    * Load pricing. Returns { pricing, isCustom, isExample, error }.
    * isExample is true when no valid custom pricing is saved, or saved pricing is identical to the example.
@@ -101,11 +114,54 @@
       var p = JSON.parse(raw);
       var errs = validatePricing(p);
       if (errs.length) return { pricing: clone(example), isCustom: false, isExample: true, error: 'Saved settings were invalid and were ignored: ' + errs[0] };
-      p = applyDefaults(p, example);
-      return { pricing: p, isCustom: true, isExample: samePricing(p, example), error: null };
+      var filled = withDefaults(p, example);
+      return { pricing: filled, isCustom: true, isExample: samePricing(filled, example), error: null };
     } catch (err2) {
       return { pricing: clone(example), isCustom: false, isExample: true, error: 'Saved settings could not be read.' };
     }
+  }
+
+  /**
+   * Older saved settings (schema 1) don't have the newer sections. Fill anything missing from the
+   * example so the app keeps working. Filled-in LiDAR / hire sections stay marked as example.
+   */
+  function withDefaults(p, example) {
+    var out = clone(p);
+    Object.keys(example).forEach(function (k) {
+      if (out[k] === undefined || out[k] === null) out[k] = clone(example[k]);
+    });
+    if (!out.jobTypes.some(function (j) { return j.kind === 'lidar'; })) {
+      example.jobTypes.forEach(function (j) { if (j.kind === 'lidar') out.jobTypes.push(clone(j)); });
+    }
+    if (!out.rateSheet) out.rateSheet = { version: 'UNVERSIONED', date: '' };
+    return out;
+  }
+
+  /** Kept for compatibility with v1 callers: fill fields added after a settings file was saved. */
+  function applyDefaults(p, example) { return example ? withDefaults(p, example) : clone(p); }
+
+  function getApprovedVersion(storage) {
+    try { return storage.getItem(APPROVED_KEY) || ''; } catch (e) { return ''; }
+  }
+  function setApprovedVersion(storage, v) {
+    v = (v || '').trim();
+    if (v) storage.setItem(APPROVED_KEY, v); else storage.removeItem(APPROVED_KEY);
+  }
+
+  /**
+   * Compare the loaded rate sheet with the approved version recorded in Settings.
+   * Returns { ok, version, date, approved, message }. ok=false means: warn and disable Copy quote.
+   * If no approved version has been recorded yet, ok is true (nothing to compare against).
+   */
+  function checkRateSheet(pricing, approved) {
+    var rs = (pricing && pricing.rateSheet) || {};
+    var version = rs.version || 'UNVERSIONED';
+    var res = { ok: true, version: version, date: rs.date || '', approved: approved || '', message: '' };
+    if (approved && approved !== version) {
+      res.ok = false;
+      res.message = 'Rate sheet mismatch: loaded "' + version + '" but the approved version is "' + approved + '". Copy quote is disabled until you import the approved sheet or update the approved version in Settings.';
+    }
+    return res;
   }
 
   function savePricing(storage, pricing) {
@@ -121,7 +177,8 @@
     return JSON.stringify({
       app: EXPORT_APP,
       kind: 'pricing-settings',
-      version: 1,
+      version: 2,
+      rateSheetVersion: pricing && pricing.rateSheet ? pricing.rateSheet.version : undefined,
       exportedAt: (now || new Date()).toISOString(),
       pricing: pricing
     }, null, 2);
@@ -162,8 +219,13 @@
   return {
     PRICING_KEY: PRICING_KEY,
     COUNTER_KEY: COUNTER_KEY,
-    validatePricing: validatePricing,
+    APPROVED_KEY: APPROVED_KEY,
+    withDefaults: withDefaults,
     applyDefaults: applyDefaults,
+    getApprovedVersion: getApprovedVersion,
+    setApprovedVersion: setApprovedVersion,
+    checkRateSheet: checkRateSheet,
+    validatePricing: validatePricing,
     samePricing: samePricing,
     loadPricing: loadPricing,
     savePricing: savePricing,

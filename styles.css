@@ -242,3 +242,35 @@ label[for="setupEvents"] { margin-top: 8px; }
   .pq-disc { font-size: 8.5pt; color: #555; margin-top: 12px; }
   .pq-foot { margin-top: 10px; padding-top: 6px; border-top: 1px solid #ccc; font-size: 8.5pt; color: #666; text-align: center; }
 }
+
+/* ---------- v0.2: LiDAR, hire, time & margin, warnings, internal panel ---------- */
+.field.sub { margin: 12px 0 0; }
+.input-unit .unit.pre { border-left: 1.5px solid var(--line); border-right: 0; border-radius: 10px 0 0 10px; min-width: 44px; }
+.input-unit .unit.pre + input { border-radius: 0 10px 10px 0; }
+.example-note { color: #7a5c0c; font-weight: 600; }
+.sublabel { font-size: .8rem; font-weight: 600; color: var(--muted); margin-top: 12px; }
+.hire-box #hireFields { margin-top: 8px; padding: 12px; border-radius: 12px; background: #faf8f2; border: 1px dashed #d9cfae; }
+.internal-tag { margin: 0 0 10px; font-size: .8rem; color: var(--soil); font-weight: 600; }
+.more { border: 1px solid #ebe7dc; border-radius: 12px; padding: 0 12px; background: #fcfbf8; }
+.more summary { cursor: pointer; font-weight: 650; font-size: .92rem; color: var(--green-900); min-height: 48px; display: flex; align-items: center; gap: 4px; }
+.more[open] { padding-bottom: 12px; }
+.grid2 .wide2, .sfield.wide2 { grid-column: 1 / -1; }
+.sfield-check { grid-column: 1 / -1; font-size: .85rem; }
+.quote-meta { margin: 0 0 8px; font-size: .8rem; color: var(--muted); }
+.warnings { display: grid; gap: 8px; margin-top: 12px; }
+.warnings:empty { display: none; }
+.warn { padding: 10px 12px; border-radius: 10px; font-size: .88rem; font-weight: 600; }
+.warn-info { background: var(--green-100); color: var(--green-900); font-weight: 500; }
+.warn-warn { background: #fff4d6; color: #7a4b00; border: 1.5px solid #e9b949; }
+.warn-danger { background: #fdecea; color: var(--danger); border: 2px solid var(--danger); }
+.internal { margin-top: 14px; padding: 12px; border-radius: 12px; background: #faf8f2; border: 1px dashed #d9cfae; }
+.internal h3 { margin: 0 0 8px; font-size: .85rem; color: var(--soil); text-transform: uppercase; letter-spacing: .04em; }
+.internal h3 + .kv, .internal .kv + h3 { margin-top: 0; }
+.internal .kv + h3 { margin-top: 14px; }
+.kv { width: 100%; border-collapse: collapse; font-size: .85rem; font-variant-numeric: tabular-nums; }
+.kv th { text-align: left; font-weight: 400; padding: 4px 8px 4px 0; color: var(--muted); }
+.kv td { text-align: right; white-space: nowrap; padding: 4px 0; font-weight: 600; }
+.kv tr.sub th, .kv tr.sub td { border-top: 1px solid #e3dccb; color: var(--ink); font-weight: 650; }
+.kv tr.pos td { color: var(--green-800); }
+.kv tr.neg td { color: var(--danger); }
+@media print { .pq-stamp { margin-top: 4px; font-size: 7.5pt; color: #888; text-align: center; } }

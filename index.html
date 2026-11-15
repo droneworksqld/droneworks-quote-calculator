@@ -34,6 +34,7 @@
       <span>Enter your real rates in <button type="button" class="linklike" id="bannerSettings">Settings</button>. They're saved on this device only.</span>
     </div>
     <div class="banner banner-warn" id="loadWarning" hidden role="alert"></div>
+    <div class="banner banner-warn" id="rateSheetWarning" hidden role="alert"></div>
 
     <main class="layout">
       <form class="card" id="quoteForm" novalidate autocomplete="off">
@@ -51,7 +52,7 @@
         </fieldset>
 
         <div class="field">
-          <label for="hectares">Area</label>
+          <label for="hectares">Area <span class="opt" id="haOpt" hidden>optional</span></label>
           <div class="input-unit">
             <input id="hectares" name="hectares" type="number" inputmode="decimal" min="0" step="any" placeholder="0" required>
             <span class="unit">ha</span>
@@ -59,6 +60,43 @@
           <p class="error" data-error-for="hectares"></p>
         </div>
 
+        <fieldset class="field" id="lidarFields" hidden>
+          <legend>LiDAR capture</legend>
+          <div class="segmented" id="lidarModeGroup">
+            <label class="seg"><input type="radio" name="lidarMode" value="half" checked><span>Half day</span></label>
+            <label class="seg"><input type="radio" name="lidarMode" value="full"><span>Full day</span></label>
+            <label class="seg"><input type="radio" name="lidarMode" value="hourly"><span>Hourly</span></label>
+          </div>
+          <div class="field sub" id="lidarHoursField" hidden>
+            <label for="lidarHours">On-site hours <span class="opt">setup, safety checks &amp; flying</span></label>
+            <div class="input-unit">
+              <input id="lidarHours" name="lidarHours" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+              <span class="unit">h</span>
+            </div>
+            <p class="error" data-error-for="lidarHours"></p>
+          </div>
+          <div class="field sub">
+            <label for="lidarRate" id="lidarRateLabel">Capture price <span class="opt">optional override</span></label>
+            <div class="input-unit">
+              <span class="unit pre">$</span>
+              <input id="lidarRate" name="lidarRate" type="number" inputmode="decimal" min="0" step="any">
+            </div>
+            <p class="hint" id="lidarRateHint"></p>
+            <p class="error" data-error-for="lidarRate"></p>
+          </div>
+          <div class="field sub">
+            <label for="processingHours">Processing hours</label>
+            <div class="input-unit">
+              <input id="processingHours" name="processingHours" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+              <span class="unit">h</span>
+            </div>
+            <p class="hint" id="processingHint"></p>
+            <p class="error" data-error-for="processingHours"></p>
+          </div>
+          <p class="hint example-note" id="lidarExampleNote" hidden>EXAMPLE LiDAR rates — import your private rate sheet in Settings for real rates.</p>
+        </fieldset>
+
+        <div id="agFields">
         <div class="field">
           <label for="product">Product / chemical</label>
           <select id="product" name="product"></select>
@@ -91,6 +129,7 @@
           <p class="hint">Product rate per hectare as per the label.</p>
           <p class="error" data-error-for="appRate"></p>
         </div>
+        </div>
 
         <fieldset class="field">
           <legend>Travel distance from base</legend>
@@ -119,6 +158,69 @@
           <p class="error" data-error-for="setupEvents"></p>
         </fieldset>
 
+        <fieldset class="field hire-box">
+          <legend>Hired equipment</legend>
+          <label class="check"><input type="checkbox" id="hireOn" name="hireOn"><span>Needs hired equipment?</span></label>
+          <div id="hireFields" hidden>
+            <p class="internal-tag">Internal only — hire is folded into the operator's rate and never shown as its own line on the quote.</p>
+            <div class="grid2">
+              <label class="sfield">Supplier<input id="hireSupplier" name="hireSupplier" type="text" list="hireSupplierList" maxlength="80" placeholder="Supplier name"></label>
+              <label class="sfield">Hire cost ($ ex GST)<input id="hireCost" name="hireCost" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+              <label class="sfield">Hire period
+                <select id="hirePeriod" name="hirePeriod">
+                  <option value="day">Per day</option>
+                  <option value="week" selected>Per week</option>
+                  <option value="job">Per job</option>
+                </select>
+              </label>
+              <label class="sfield">Recover % of hire<input id="hireRecovery" name="hireRecovery" type="number" inputmode="decimal" min="0" max="100" step="any" value="100"></label>
+            </div>
+            <datalist id="hireSupplierList"></datalist>
+            <p class="error" data-error-for="hireCost"></p>
+            <p class="error" data-error-for="hireRecovery"></p>
+            <div class="sublabel">Jobs sharing this hire week</div>
+            <div class="segmented compact">
+              <label class="seg"><input type="radio" name="hireJobs" value="1" checked><span>1</span></label>
+              <label class="seg"><input type="radio" name="hireJobs" value="2"><span>2</span></label>
+              <label class="seg"><input type="radio" name="hireJobs" value="3"><span>3</span></label>
+            </div>
+            <label class="check"><input type="checkbox" id="hireCovered" name="hireCovered"><span>Hire week already covered by another job</span></label>
+            <p class="hint">On-site hours come from the time breakdown below, or are estimated from the job.</p>
+          </div>
+        </fieldset>
+
+        <details class="field more" id="timeBox">
+          <summary>Time, costs &amp; margin <span class="opt">internal</span></summary>
+          <div class="grid2">
+            <label class="sfield">Planning / admin (h)<input id="hoursPlanning" name="hoursPlanning" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+            <label class="sfield">Travel (h)<input id="hoursTravel" name="hoursTravel" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+            <label class="sfield">On-site setup &amp; flying (h)<input id="hoursOnsite" name="hoursOnsite" type="number" inputmode="decimal" min="0" step="any" placeholder="auto"></label>
+            <label class="sfield">Processing / reporting (h)<input id="hoursProcessing" name="hoursProcessing" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+            <label class="sfield">Labour rate ($/h)<input id="labourRate" name="labourRate" type="number" inputmode="decimal" min="0" step="any"></label>
+            <label class="sfield">Extra crew / subcontractor ($)<input id="crewCost" name="crewCost" type="number" inputmode="decimal" min="0" step="any" placeholder="0"></label>
+            <label class="sfield">Overhead / equipment allowance ($)<input id="overhead" name="overhead" type="number" inputmode="decimal" min="0" step="any"></label>
+            <label class="sfield">Target profit margin (%)<input id="marginPct" name="marginPct" type="number" inputmode="decimal" min="0" max="94" step="any"></label>
+          </div>
+          <p class="hint" id="labourHint"></p>
+          <p class="error" data-error-for="marginPct"></p>
+        </details>
+
+        <fieldset class="field">
+          <legend>Quote options</legend>
+          <div class="grid2">
+            <label class="sfield">Round quote up to
+              <select id="roundTo" name="roundTo">
+                <option value="1">Nearest $1</option>
+                <option value="10">Nearest $10</option>
+                <option value="50">Nearest $50</option>
+                <option value="100">Nearest $100</option>
+              </select>
+            </label>
+            <label class="sfield">Quote valid for (days)<input id="validDays" name="validDays" type="number" inputmode="numeric" min="0" step="1"></label>
+          </div>
+          <label class="check"><input type="checkbox" id="gstOn" name="gstOn" checked><span>Add GST (10%)</span></label>
+        </fieldset>
+
         <div class="field">
           <label for="notes">Notes on quote <span class="opt">optional</span></label>
           <textarea id="notes" name="notes" rows="2" maxlength="400" placeholder="e.g. Includes 2 passes, buffer zones excluded"></textarea>
@@ -137,6 +239,7 @@
             <div class="total-amount" id="totalAmount"></div>
             <div class="total-perha" id="perHa"></div>
           </div>
+          <p class="quote-meta" id="quoteMeta"></p>
           <table class="breakdown">
             <tbody id="breakdownRows"></tbody>
             <tfoot>
@@ -145,6 +248,8 @@
               <tr class="grand"><th scope="row">Total (inc GST)</th><td id="total"></td></tr>
             </tfoot>
           </table>
+          <div id="warnings" class="warnings"></div>
+          <section class="internal" id="internalPanel" aria-label="Internal figures (not printed)"></section>
         </div>
       </section>
     </main>
@@ -168,6 +273,13 @@
         <p class="notice">Your rates are saved <strong>only in this browser on this device</strong> — never in the website code. Use <em>Export</em> to back them up or move them to another phone or computer, then <em>Import</em> there.</p>
         <div class="banner banner-example inline" id="settingsExampleNote">Currently showing <strong>example</strong> numbers. Replace them with your real rates and tap Save.</div>
 
+        <h3>Rate sheet</h3>
+        <div class="grid2">
+          <label class="sfield">Loaded rate-sheet version<input type="text" data-type="text" data-path="rateSheet.version" maxlength="40"></label>
+          <label class="sfield">Rate-sheet date<input type="date" data-type="text" data-path="rateSheet.date"></label>
+          <label class="sfield wide2">Approved rate-sheet version <span class="opt">Copy quote is disabled if the loaded sheet doesn't match</span><input type="text" id="approvedVersion" maxlength="40" placeholder="e.g. v2026-11-06"></label>
+        </div>
+
         <h3>General (ex GST)</h3>
         <div class="grid2">
           <label class="sfield">Minimum job charge ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="minimumCharge"></label>
@@ -179,6 +291,37 @@
           <label class="sfield">Terrain surcharge (%)<input type="number" inputmode="decimal" min="0" step="any" data-path="surcharges.terrainPct"></label>
           <label class="sfield">GST (%)<input type="number" inputmode="decimal" min="0" max="100" step="any" data-path="gstRate" data-percent="1"></label>
           <label class="sfield">Quote valid for (days)<input type="number" inputmode="numeric" min="0" step="1" data-path="quoteValidityDays"></label>
+          <label class="sfield">Default rounding ($)
+            <select data-path="defaultRoundTo" data-type="number"><option value="1">$1</option><option value="10">$10</option><option value="50">$50</option><option value="100">$100</option></select>
+          </label>
+        </div>
+
+        <h3>Labour, overheads &amp; margin</h3>
+        <div class="grid2">
+          <label class="sfield">Labour rate ($/h)<input type="number" inputmode="decimal" min="0" step="any" data-path="labourRatePerHour"></label>
+          <label class="sfield">Overhead allowance per job ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="overheadPerJob"></label>
+          <label class="sfield">Target profit margin (%)<input type="number" inputmode="decimal" min="0" max="94" step="any" data-path="targetMarginPct"></label>
+        </div>
+
+        <h3>LiDAR rates <span class="opt">ex GST</span></h3>
+        <div class="grid2">
+          <label class="sfield">Half-day price ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.halfDayPrice"></label>
+          <label class="sfield">Half-day floor ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.halfDayFloor"></label>
+          <label class="sfield">Full-day target ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.fullDayTarget"></label>
+          <label class="sfield">Full-day floor ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.fullDayFloor"></label>
+          <label class="sfield">Hourly rate ($/h)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.hourlyRate"></label>
+          <label class="sfield">Hourly floor ($/h)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.hourlyFloor"></label>
+          <label class="sfield">Processing ($/h)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.processingPerHour"></label>
+          <label class="sfield">Suggest full day above (h)<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.suggestFullDayAboveHours"></label>
+          <label class="sfield">Minimum billable hours<input type="number" inputmode="decimal" min="0" step="any" data-path="lidar.minBillableHours"></label>
+          <label class="check sfield-check"><input type="checkbox" data-type="bool" data-path="lidar.minBillableHoursEnabled"><span>Use minimum billable hours (owned kit / hire week already covered)</span></label>
+        </div>
+
+        <h3>Hire-week break-even <span class="opt">added to the hire cost</span></h3>
+        <div class="grid2">
+          <label class="sfield">Insurance ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="hire.insurance"></label>
+          <label class="sfield">Consumables ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="hire.consumables"></label>
+          <label class="sfield">Fuel ($)<input type="number" inputmode="decimal" min="0" step="any" data-path="hire.fuel"></label>
         </div>
 
         <h3>Job types &amp; rates</h3>
